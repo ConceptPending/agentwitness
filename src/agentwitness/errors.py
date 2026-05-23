@@ -60,3 +60,7 @@ class ScopeError(VerifyError):
 
 class KeyResolutionError(VerifyError):
     """A referenced key_id could not be resolved against the active manifests."""
+
+
+class WriterError(VerifyError):
+    """Errors during event writing: concurrent write, corrupt head, unsupported platform."""
