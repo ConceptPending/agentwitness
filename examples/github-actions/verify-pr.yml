@@ -1,0 +1,43 @@
+# Example GitHub Action: verify an agentwitness bundle attached to a PR.
+#
+# To use, copy this file to .github/workflows/agentwitness-verify.yml in
+# your repository. The workflow runs on any pull request that adds or
+# changes files under .agentwitness/.
+#
+# Local workflow assumed:
+#
+#     agentwitness export -o .agentwitness/pr-bundle
+#     git add .agentwitness/pr-bundle
+#     git commit -m "Attach agentwitness bundle"
+#     git push
+#
+# CI then runs `agentwitness verify` on the directory. A failed
+# verification fails the PR check; a missing bundle simply does not
+# trigger the workflow.
+
+name: agentwitness verify
+
+on:
+  pull_request:
+    paths:
+      - ".agentwitness/**"
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install agentwitness
+        run: pip install agentwitness
+
+      - name: Verify the attached bundle
+        run: agentwitness verify .agentwitness/pr-bundle
