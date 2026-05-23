@@ -275,3 +275,80 @@ def test_main_handles_unknown_event_silently(
     # No event was recorded; no error logged either.
     err = capsys.readouterr().err
     assert err == ""
+
+
+# ---- path normalisation (spec §3.4) ----
+
+
+def test_path_normalised_relative_to_cwd(installed_environment: dict[str, Any]) -> None:
+    """An absolute file_path under cwd becomes repo-relative in the event."""
+    payload = {
+        "session_id": "abc",
+        "cwd": "/Users/nick",
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Write",
+        "tool_input": {"file_path": "/Users/nick/lorem.md", "content": "x"},
+        "tool_use_id": "tu-1",
+    }
+    body = build_event_body(
+        payload,
+        manifest=installed_environment["manifest"],
+        key_id=installed_environment["key_id"],
+    )
+    assert body is not None
+    assert body["resources"][0]["path"] == "lorem.md"
+
+
+def test_path_outside_cwd_stays_absolute(installed_environment: dict[str, Any]) -> None:
+    """A file outside the project root is recorded with its absolute path."""
+    payload = {
+        "session_id": "abc",
+        "cwd": "/Users/nick/proj",
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Read",
+        "tool_input": {"file_path": "/etc/hosts"},
+        "tool_use_id": "tu-1",
+    }
+    body = build_event_body(
+        payload,
+        manifest=installed_environment["manifest"],
+        key_id=installed_environment["key_id"],
+    )
+    assert body is not None
+    assert body["resources"][0]["path"] == "/etc/hosts"
+
+
+def test_path_without_cwd_in_payload_stays_unchanged(
+    installed_environment: dict[str, Any],
+) -> None:
+    """If the payload has no cwd we have no project root, so paths stay verbatim."""
+    payload = {
+        "session_id": "abc",
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Write",
+        "tool_input": {"file_path": "/Users/nick/lorem.md", "content": "x"},
+        "tool_use_id": "tu-1",
+    }
+    body = build_event_body(
+        payload,
+        manifest=installed_environment["manifest"],
+        key_id=installed_environment["key_id"],
+    )
+    assert body is not None
+    assert body["resources"][0]["path"] == "/Users/nick/lorem.md"
+
+
+def test_normalise_path_helper_edge_cases() -> None:
+    from agentwitness.hook import _normalise_path
+
+    # Inside cwd → relative
+    assert _normalise_path("/proj/src/app.ts", "/proj") == "src/app.ts"
+    # Cwd with trailing slash → still works
+    assert _normalise_path("/proj/src/app.ts", "/proj/") == "src/app.ts"
+    # Path equal to cwd → keep as-is (edge case)
+    assert _normalise_path("/proj", "/proj") == "/proj"
+    # Path is a sibling that shares a prefix → must NOT be treated as relative
+    assert _normalise_path("/projXY/src/app.ts", "/proj") == "/projXY/src/app.ts"
+    # Empty cwd → no-op
+    assert _normalise_path("/Users/nick/lorem.md", "") == "/Users/nick/lorem.md"
+    assert _normalise_path("/Users/nick/lorem.md", None) == "/Users/nick/lorem.md"
