@@ -31,20 +31,17 @@ agentwitness verify: OK  (./evidence)
 
 ## Status
 
-**v0.1, pre-release.** First useful end-to-end path is in: record via
-Claude Code hooks, export a bundle, verify it. POSIX only (Linux and
-macOS); Windows support pending a cross-platform writer lock. API may
-shift before v0.2.
-
-The repo is currently private. The PyPI package name is reserved but
-the published artefact is a stub — install from source until v0.1.0
-ships there.
+**v0.1.0, alpha.** First functional release: record via Claude Code
+hooks, export a bundle, verify it. POSIX only (Linux and macOS);
+Windows support pending a cross-platform writer lock. API may shift
+before v0.2 — see the [changelog](./CHANGELOG.md) for the v0.1 feature
+set and known limitations.
 
 ## Quickstart
 
 ```bash
-# Install from source while the repo is private
-pipx install git+ssh://git@github.com/ConceptPending/agentwitness.git
+# Install with pipx (recommended) or pip
+pipx install agentwitness
 
 # One-time setup: generates an Ed25519 keypair in your OS keychain,
 # writes a default manifest, and adds hook entries to ~/.claude/settings.json
