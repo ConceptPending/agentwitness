@@ -86,14 +86,41 @@ def _load_manifest() -> dict[str, Any]:
     return result
 
 
-def _resources_for_tool(tool_name: str, tool_input: dict[str, Any]) -> list[dict[str, Any]]:
+def _normalise_path(path: str, cwd: str | None) -> str:
+    """Per spec §3.4: if a project root is known and ``path`` is under it,
+    return the project-relative form. Otherwise leave the path absolute.
+
+    The hook treats Claude Code's payload ``cwd`` as the project root.
+    Symlinks are not followed (spec §3.4 rule 1). Paths outside cwd stay
+    absolute.
+    """
+    if not cwd:
+        return path
+    cwd = cwd.rstrip("/")
+    if not cwd:
+        return path
+    if path == cwd:
+        return path  # the path IS the project root; leave it alone
+    prefix = cwd + "/"
+    if path.startswith(prefix):
+        return path[len(prefix) :]
+    return path
+
+
+def _resources_for_tool(
+    tool_name: str,
+    tool_input: dict[str, Any],
+    *,
+    cwd: str | None = None,
+) -> list[dict[str, Any]]:
     """Best-effort mapping of Claude Code tool inputs to spec §4 resources.
 
     Many tools (Bash, WebFetch, WebSearch, AskUserQuestion) have no path
     semantics we can infer from the input alone; those record with an
     empty resources list and the verifier can still scope-check based on
     the tool name. Tools with obvious file paths (Edit, Write, Read) get
-    a single resource entry.
+    a single resource entry with the path normalised relative to ``cwd``
+    when that path is inside the project root.
     """
     if tool_name in {"Edit", "Write"}:
         path = tool_input.get("file_path")
@@ -102,7 +129,7 @@ def _resources_for_tool(tool_name: str, tool_input: dict[str, Any]) -> list[dict
                 {
                     "type": "file",
                     "op": "write",
-                    "path": path,
+                    "path": _normalise_path(path, cwd),
                     "before_hash": None,
                     "after_hash": None,
                 }
@@ -114,7 +141,7 @@ def _resources_for_tool(tool_name: str, tool_input: dict[str, Any]) -> list[dict
                 {
                     "type": "file",
                     "op": "read",
-                    "path": path,
+                    "path": _normalise_path(path, cwd),
                     "before_hash": None,
                     "after_hash": None,
                 }
@@ -171,10 +198,12 @@ def build_event_body(
     if kind in {"tool.requested", "tool.completed", "tool.failed"}:
         tool_name = payload.get("tool_name", "unknown")
         tool_input = payload.get("tool_input", {}) or {}
+        cwd = payload.get("cwd")
+        cwd_str = cwd if isinstance(cwd, str) else None
         body["tool"] = tool_name
         body["inputs"] = {}
         body["outputs"] = {}
-        body["resources"] = _resources_for_tool(tool_name, tool_input)
+        body["resources"] = _resources_for_tool(tool_name, tool_input, cwd=cwd_str)
         tool_use_id = payload.get("tool_use_id")
         if isinstance(tool_use_id, str):
             body["request_id"] = tool_use_id
