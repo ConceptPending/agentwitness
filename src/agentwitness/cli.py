@@ -13,6 +13,7 @@ from pathlib import Path
 import click
 
 from agentwitness import __version__
+from agentwitness.hook import main as hook_main
 from agentwitness.verify import verify as verify_bundle
 
 
@@ -65,6 +66,16 @@ def _human_report(result: object, path: Path) -> str:
         for err in result.errors:
             lines.append(f"    - {err.code}: {err.message}")
     return "\n".join(lines)
+
+
+@cli.command("hook")
+def hook_cmd() -> None:
+    """Hook entry point. Reads a Claude Code hook payload from stdin and records it.
+
+    Wired into ``~/.claude/settings.json`` by ``agentwitness install``.
+    Always exits 0 — recording never blocks tool calls.
+    """
+    sys.exit(hook_main())
 
 
 def main() -> None:
