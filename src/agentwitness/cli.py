@@ -1,22 +1,24 @@
-"""Command-line interface for agentwitness.
-
-v0.1 ships one subcommand, ``verify``. Future phases will add ``init``,
-``install``, ``blame``, ``export``, and ``keys``.
-"""
+"""Command-line interface for agentwitness."""
 
 from __future__ import annotations
 
 import json
 import sys
+from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 import click
+import nacl.signing
 
-from agentwitness import __version__
+from agentwitness import __version__, keychain
+from agentwitness.export import build_bundle
 from agentwitness.hook import main as hook_main
 from agentwitness.install import install as install_impl
 from agentwitness.install import uninstall as uninstall_impl
+from agentwitness.state import sessions_dir, state_dir
 from agentwitness.verify import verify as verify_bundle
+from agentwitness.writer import Session
 
 
 @click.group()
@@ -175,6 +177,187 @@ def uninstall_cmd(
         click.echo(
             "Kept keychain and state directory (use --purge-keys / --purge-state to remove)."
         )
+
+
+# ---- export / summary / blame ----
+
+
+def _list_session_dirs() -> list[Path]:
+    """All recorded session directories, oldest first."""
+    root = sessions_dir()
+    if not root.exists():
+        return []
+    return sorted((p for p in root.iterdir() if p.is_dir()), key=lambda p: p.stat().st_mtime)
+
+
+def _read_session_events(session_path: Path) -> list[dict[str, Any]]:
+    """Parse the events.jsonl for a session. Returns [] if the file is missing or empty."""
+    events_path = session_path / "events.jsonl"
+    if not events_path.exists():
+        return []
+    out: list[dict[str, Any]] = []
+    for line in events_path.read_text().splitlines():
+        line = line.strip()
+        if line:
+            out.append(json.loads(line))
+    return out
+
+
+def _format_ts(ts: str) -> str:
+    """Trim millisecond ISO to a friendlier form for tabular output."""
+    try:
+        dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+        return dt.strftime("%Y-%m-%d %H:%M:%S")
+    except ValueError:
+        return ts
+
+
+def _resolve_session(session_id: str | None, latest: bool) -> Path:
+    """Pick a session directory based on flags. Defaults to latest."""
+    if session_id:
+        candidate = sessions_dir() / session_id
+        if not candidate.is_dir():
+            raise click.ClickException(f"No session named {session_id!r} found.")
+        return candidate
+
+    sessions = _list_session_dirs()
+    if not sessions:
+        raise click.ClickException(
+            "No sessions recorded yet. Run `agentwitness install` and use Claude Code first."
+        )
+    if not latest and session_id is None:
+        # Default behaviour — pick the most recent.
+        pass
+    return sessions[-1]
+
+
+def _load_active_manifest() -> dict[str, Any]:
+    manifest_path = state_dir() / "manifest.json"
+    if not manifest_path.exists():
+        raise click.ClickException(
+            f"No manifest at {manifest_path}. Run `agentwitness install` first."
+        )
+    try:
+        result: dict[str, Any] = json.loads(manifest_path.read_text())
+    except json.JSONDecodeError as exc:
+        raise click.ClickException(f"Manifest is not valid JSON: {exc}") from exc
+    return result
+
+
+def _load_signing_key(label: str) -> nacl.signing.SigningKey:
+    if not keychain.exists(label):
+        raise click.ClickException(
+            f"No signing key in keychain under label {label!r}. Run `agentwitness install` first."
+        )
+    return nacl.signing.SigningKey(keychain.load_seed(label))
+
+
+@cli.command("export")
+@click.option("--session", "session_id", default=None, help="Export a specific session id.")
+@click.option(
+    "--latest",
+    is_flag=True,
+    default=False,
+    help="Export the most recent session (this is the default when no flags are given).",
+)
+@click.option(
+    "--output",
+    "-o",
+    type=click.Path(path_type=Path),
+    required=True,
+    help="Directory to write the bundle into. Will be created if missing.",
+)
+@click.option("--label", default="default", show_default=True)
+def export_cmd(session_id: str | None, latest: bool, output: Path, label: str) -> None:
+    """Build an evidence bundle from a recorded session.
+
+    With no flags, exports the most recent session. Use ``--session <id>``
+    to pick a specific one (``agentwitness summary`` lists them).
+    """
+    session_path = _resolve_session(session_id, latest)
+    manifest = _load_active_manifest()
+    signing_key = _load_signing_key(label)
+    session = Session.open_or_create(session_path, session_id=session_path.name)
+    bundle_path = build_bundle(
+        session=session,
+        manifest=manifest,
+        signing_key=signing_key,
+        out_dir=output,
+    )
+    click.echo(f"Bundle written to {bundle_path}")
+    click.echo("Verify with: agentwitness verify " + str(bundle_path))
+
+
+@cli.command("summary")
+@click.option("--label", default="default", show_default=True)
+def summary_cmd(label: str) -> None:
+    """Show recorded sessions, the active manifest, and the active key."""
+    if not (state_dir() / "manifest.json").exists():
+        click.echo("agentwitness is not installed on this machine.")
+        click.echo("Run `agentwitness install` to start recording.")
+        return
+
+    manifest = _load_active_manifest()
+    click.echo(f"manifest: {manifest['id']}")
+    click.echo(f"  issued:  {_format_ts(manifest['issued_at'])}")
+    click.echo(f"  expires: {_format_ts(manifest['expires_at'])}")
+    click.echo(f"  issuer:  {manifest['issuer']}")
+    click.echo("")
+
+    sessions = _list_session_dirs()
+    if not sessions:
+        click.echo("No sessions recorded yet.")
+        return
+
+    click.echo(f"sessions ({len(sessions)}):")
+    for path in sessions:
+        events = _read_session_events(path)
+        if not events:
+            click.echo(f"  {path.name}  (no events yet)")
+            continue
+        platform = events[0].get("session", {}).get("platform_id") or "?"
+        first = _format_ts(events[0]["ts"])
+        last = _format_ts(events[-1]["ts"])
+        click.echo(f"  {path.name}  {len(events):>4} events  {first} → {last}  ({platform})")
+
+
+@cli.command("blame")
+@click.argument("file_path", type=str)
+def blame_cmd(file_path: str) -> None:
+    """Show recorded events that touched FILE_PATH.
+
+    Match is exact-string against the ``path`` field of each event's
+    resources. In v0.1 the recorder writes file paths verbatim from the
+    agent's tool input; glob support is post-v0.
+    """
+    sessions = _list_session_dirs()
+    if not sessions:
+        click.echo(f"No events recorded yet (looked for {file_path}).")
+        return
+
+    matches: list[tuple[str, str, str, str, str]] = []  # (ts, kind, tool, session, status)
+    for sess_path in sessions:
+        for event in _read_session_events(sess_path):
+            resources = event.get("resources") or []
+            if any(r.get("path") == file_path for r in resources):
+                matches.append(
+                    (
+                        event.get("ts", ""),
+                        event.get("kind", "?"),
+                        event.get("tool", "?"),
+                        sess_path.name,
+                        event.get("outcome", {}).get("status", "?"),
+                    )
+                )
+
+    if not matches:
+        click.echo(f"No recorded events touched {file_path}.")
+        return
+
+    matches.sort(key=lambda row: row[0])
+    click.echo(f"events touching {file_path}:")
+    for ts, kind, tool, sess, status in matches:
+        click.echo(f"  {_format_ts(ts)}  {kind:<16} {tool:<14} {sess[:20]}  ({status})")
 
 
 def main() -> None:
