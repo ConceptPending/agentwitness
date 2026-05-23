@@ -38,7 +38,12 @@ classifiers = [
 dependencies = [
     "jcs>=0.2.1",
     "pynacl>=1.5.0",
+    "click>=8.1",
+    "typing_extensions>=4.7.0; python_version<'3.11'",
 ]
+
+[project.scripts]
+agentwitness = "agentwitness.cli:main"
 
 [project.optional-dependencies]
 dev = [
