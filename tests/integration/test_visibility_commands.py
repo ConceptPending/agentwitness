@@ -158,6 +158,25 @@ def test_blame_finds_matching_events(recorded_environment: dict[str, Any]) -> No
     assert "Edit" in result.output
 
 
+def test_blame_matches_by_trailing_segment() -> None:
+    """The fix that makes blame useful in practice — Claude Code records
+    absolute paths and most users will type the file name."""
+    from agentwitness.cli import _blame_matches
+
+    # Exact equality
+    assert _blame_matches("/Users/nick/lorem.md", "/Users/nick/lorem.md")
+    # Trailing segment match — the case that bit during real dogfood
+    assert _blame_matches("lorem.md", "/Users/nick/lorem.md")
+    assert _blame_matches("src/auth.ts", "/Users/nick/proj/src/auth.ts")
+    # Same suffix but different file — must NOT match
+    assert not _blame_matches("lorem.md", "/Users/nick/other-lorem.md")
+    # Absolute query requires exact match, no fuzziness
+    assert not _blame_matches("/Users/nick/lorem.md", "/Users/nick/other/lorem.md")
+    assert not _blame_matches("/lorem.md", "/Users/nick/lorem.md")
+    # Empty resource path never matches
+    assert not _blame_matches("lorem.md", "")
+
+
 def test_blame_no_match(recorded_environment: dict[str, Any]) -> None:
     runner = CliRunner()
     result = runner.invoke(cli, ["blame", "src/never_touched.ts"])
