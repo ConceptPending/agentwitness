@@ -133,3 +133,115 @@ def test_wrong_key_rejected() -> None:
             key_id="k",
         )
     assert exc_info.value.code == "signature.verification_failed"
+
+
+# ---- Producer side ----
+
+
+def test_sign_event_then_verify_roundtrip() -> None:
+    """sign_event followed by verify_signature on the same canonical bytes
+    succeeds. Direct roundtrip closes the loop between producer and verifier."""
+    from agentwitness.canonical import event_id as compute_event_id
+    from agentwitness.canonical import event_signing_bytes
+    from agentwitness.signing import sign_event
+
+    sk = nacl.signing.SigningKey.generate()
+    body = {"v": "agentwitness/0.1", "foo": "bar"}
+    body["id"] = compute_event_id(body)
+    sig = sign_event(body, sk)
+    verify_signature(
+        signing_input=event_signing_bytes(body),
+        signature_b64=base64.b64encode(sig).decode(),
+        alg="ed25519",
+        verify_key=sk.verify_key,
+        event_id=body["id"],
+        key_id="x",
+    )
+
+
+def test_sign_event_rejects_missing_id() -> None:
+    from agentwitness.signing import sign_event
+
+    sk = nacl.signing.SigningKey.generate()
+    with pytest.raises(SignatureError) as exc_info:
+        sign_event({"v": "agentwitness/0.1"}, sk)
+    assert exc_info.value.code == "signing.event_missing_id"
+
+
+def test_sign_manifest_then_verify_roundtrip() -> None:
+    from agentwitness.canonical import manifest_id as compute_manifest_id
+    from agentwitness.canonical import manifest_signing_bytes
+    from agentwitness.signing import sign_manifest
+
+    sk = nacl.signing.SigningKey.generate()
+    body: dict = {"v": "agentwitness/0.1", "issuer": "x"}
+    body["id"] = compute_manifest_id(body)
+    sig = sign_manifest(body, sk)
+    verify_signature(
+        signing_input=manifest_signing_bytes(body),
+        signature_b64=base64.b64encode(sig).decode(),
+        alg="ed25519",
+        verify_key=sk.verify_key,
+        event_id=body["id"],
+        key_id="x",
+    )
+
+
+def test_sign_chain_then_verify_roundtrip() -> None:
+    from agentwitness.canonical import chain_signing_bytes
+    from agentwitness.signing import sign_chain
+
+    sk = nacl.signing.SigningKey.generate()
+    body = {"v": "agentwitness/0.1", "sessions": []}
+    sig = sign_chain(body, sk)
+    verify_signature(
+        signing_input=chain_signing_bytes(body),
+        signature_b64=base64.b64encode(sig).decode(),
+        alg="ed25519",
+        verify_key=sk.verify_key,
+        event_id="<chain>",
+        key_id="x",
+    )
+
+
+def test_make_event_signer_callback_produces_writer_compatible_object() -> None:
+    """make_event_signer returns a callable that the writer can call directly."""
+    from agentwitness.signing import make_event_signer
+
+    sk = nacl.signing.SigningKey.generate()
+    signer = make_event_signer(sk, key_id="abc")
+    sig_obj = signer("event-id-here", b"some canonical bytes")
+    assert sig_obj["event_id"] == "event-id-here"
+    assert sig_obj["key_id"] == "abc"
+    assert sig_obj["alg"] == "ed25519"
+    # Verify the produced signature is correct.
+    verify_signature(
+        signing_input=b"some canonical bytes",
+        signature_b64=sig_obj["sig"],
+        alg="ed25519",
+        verify_key=sk.verify_key,
+        event_id="event-id-here",
+        key_id="abc",
+    )
+
+
+@given(seed=st.binary(min_size=32, max_size=32), message=st.binary(max_size=128))
+def test_sign_event_property_roundtrip(seed: bytes, message: bytes) -> None:
+    """Property: for any signing key and any event-like body, sign-then-verify
+    succeeds."""
+    from agentwitness.canonical import event_id as compute_event_id
+    from agentwitness.canonical import event_signing_bytes
+    from agentwitness.signing import sign_event
+
+    sk = nacl.signing.SigningKey(seed)
+    body: dict = {"v": "agentwitness/0.1", "payload_b64": base64.b64encode(message).decode()}
+    body["id"] = compute_event_id(body)
+    sig = sign_event(body, sk)
+    verify_signature(
+        signing_input=event_signing_bytes(body),
+        signature_b64=base64.b64encode(sig).decode(),
+        alg="ed25519",
+        verify_key=sk.verify_key,
+        event_id=body["id"],
+        key_id="x",
+    )

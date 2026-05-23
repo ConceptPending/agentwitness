@@ -23,19 +23,25 @@ from __future__ import annotations
 import fcntl
 import json
 import sys
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from agentwitness.canonical import event_id
+from agentwitness.canonical import event_id, event_signing_bytes
 from agentwitness.errors import WriterError
-from agentwitness.types import RawEvent
+from agentwitness.types import RawEvent, RawSignature
 
 # Fields the writer assigns. A caller-supplied body must not include any of
 # these; the writer will reject the body if it does.
 _CHAIN_FIELDS = frozenset({"prev", "seq", "id"})
+
+# A signer callback takes the new event's id and canonical signing-input bytes,
+# and returns a complete signature object dict (event_id, key_id, alg, sig).
+# The writer does not interpret the signature internals; it just appends the
+# returned dict to signatures.jsonl alongside the event.
+SignerCallback = Callable[[str, bytes], RawSignature]
 
 
 @dataclass(frozen=True)
@@ -138,6 +144,10 @@ class Session:
         return self.path / "head.json"
 
     @property
+    def signatures_path(self) -> Path:
+        return self.path / "signatures.jsonl"
+
+    @property
     def lock_path(self) -> Path:
         return self.path / ".lock"
 
@@ -145,13 +155,46 @@ class Session:
         return _read_head(self.head_path)
 
     def append(self, body: dict[str, Any]) -> RawEvent:
-        """Compose ``prev``/``seq``/``id`` around ``body``, append, return the full event.
+        """Append an unsigned event. Returns the full event with chain fields assigned.
 
-        The caller's ``body`` must NOT carry ``prev``, ``seq``, or ``id``;
-        the writer assigns those. Everything else (``v``, ``kind``, ``ts``,
-        ``session``, ``agent``, ``actor``, ``outcome``, plus tool-only
-        fields where applicable) is the caller's responsibility.
+        Equivalent to ``record(body, signer=None)[0]`` but with a simpler
+        return type. Use this in contexts where signing is genuinely not
+        wanted (test fixtures, dry-run tooling). Production recording goes
+        through ``record``.
+
+        Body MUST NOT carry ``prev``, ``seq``, or ``id``; the writer assigns
+        those.
         """
+        event, _ = self._append_locked(body, signer=None)
+        return event
+
+    def record(
+        self,
+        body: dict[str, Any],
+        *,
+        signer: SignerCallback,
+    ) -> tuple[RawEvent, RawSignature]:
+        """Append an event AND its signature atomically.
+
+        The ``signer`` callback receives the event id and the canonical
+        signing-input bytes (spec §7.2) and returns a complete signature
+        object dict (``event_id``, ``key_id``, ``alg``, ``sig``). The writer
+        appends both the event line and the signature line inside a single
+        lock-held window so the two files cannot drift apart under
+        concurrent access.
+
+        Body MUST NOT carry ``prev``, ``seq``, or ``id``.
+        """
+        event, sig_obj = self._append_locked(body, signer=signer)
+        assert sig_obj is not None  # signer was provided, so writer produced one
+        return event, sig_obj
+
+    def _append_locked(
+        self,
+        body: dict[str, Any],
+        *,
+        signer: SignerCallback | None,
+    ) -> tuple[RawEvent, RawSignature | None]:
         for forbidden in _CHAIN_FIELDS:
             if forbidden in body:
                 raise WriterError(
@@ -167,8 +210,19 @@ class Session:
             new_event["seq"] = head.seq + 1
             new_event["id"] = event_id(new_event)
 
+            # Compute the signature before any file writes so signing
+            # failures do not leave a partially-written log.
+            sig_obj: RawSignature | None = None
+            if signer is not None:
+                signing_input = event_signing_bytes(new_event)
+                sig_obj = signer(new_event["id"], signing_input)
+
             with open(self.events_path, "a") as fh:
                 fh.write(json.dumps(new_event, sort_keys=True) + "\n")
+
+            if sig_obj is not None:
+                with open(self.signatures_path, "a") as fh:
+                    fh.write(json.dumps(sig_obj, sort_keys=True) + "\n")
 
             _write_head(
                 self.head_path,
@@ -179,4 +233,4 @@ class Session:
                 ),
             )
 
-        return new_event
+        return new_event, sig_obj

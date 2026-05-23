@@ -1,4 +1,4 @@
-"""Authority manifest verification and scope evaluation.
+"""Authority manifest verification, scope evaluation, and default builders.
 
 Spec references:
 - §7.3 manifest_id derivation
@@ -12,7 +12,10 @@ the issuer key to a real-world identity is a trust-anchor question (spec
 
 from __future__ import annotations
 
+import base64
 from typing import Any
+
+import nacl.signing
 
 from agentwitness.canonical import (
     manifest_id as compute_manifest_id,
@@ -23,7 +26,7 @@ from agentwitness.canonical import (
 from agentwitness.errors import ManifestError, ScopeError, SignatureError
 from agentwitness.keys import load_public_key_b64
 from agentwitness.paths import path_matches, tool_matches
-from agentwitness.signing import verify_signature
+from agentwitness.signing import sign_manifest, verify_signature
 from agentwitness.types import RawEvent, RawManifest, is_tool_kind
 
 
@@ -223,3 +226,64 @@ def evaluate_event_scope(event: RawEvent, manifest: RawManifest) -> bool:
         if paths_ok:
             return True
     return False
+
+
+# ---- Builder ----
+
+
+def build_default_manifest(
+    *,
+    signing_key: nacl.signing.SigningKey,
+    key_id: str,
+    issued_at: str,
+    expires_at: str,
+    label: str = "default",
+    project_name: str = "default",
+    allow_everything: bool = True,
+) -> RawManifest:
+    """Construct, self-sign, and return a default permissive manifest.
+
+    The signer is also the manifest issuer and the sole principal. When
+    ``allow_everything`` is True (the install-time default), the principal's
+    single scope allows any tool against any path — agentwitness records
+    rather than enforces in this configuration. When False, the scope is
+    empty and every action is denied. Both ``issued_at`` and ``expires_at``
+    must be RFC 3339 UTC strings per spec §3.1; the caller picks the window.
+    """
+    public_key_b64 = base64.b64encode(bytes(signing_key.verify_key)).decode()
+
+    if allow_everything:
+        scope: dict[str, list[str]] = {
+            "allow_tools": ["*"],
+            "deny_tools": [],
+            "allow_paths": ["**"],
+            "deny_paths": [],
+            "allow_delegates": [],
+        }
+    else:
+        scope = {
+            "allow_tools": [],
+            "deny_tools": [],
+            "allow_paths": [],
+            "deny_paths": [],
+            "allow_delegates": [],
+        }
+
+    body: RawManifest = {
+        "v": "agentwitness/0.1",
+        "issued_at": issued_at,
+        "expires_at": expires_at,
+        "issuer": key_id,
+        "project": {"name": project_name, "root_hash": None},
+        "principals": [
+            {
+                "key_id": key_id,
+                "label": label,
+                "public_key": public_key_b64,
+                "scopes": [scope],
+            }
+        ],
+    }
+    body["id"] = compute_manifest_id(body)
+    body["sig"] = base64.b64encode(sign_manifest(body, signing_key)).decode()
+    return body
