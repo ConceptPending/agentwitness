@@ -48,6 +48,14 @@ You might want it if:
 - You want PRs from agent-assisted work to ship with independently
   verifiable evidence of what the agent did.
 
+## Why not just Git?
+
+Git records the diff that landed in a commit. agentwitness records the
+agent actions that produced it: which files were read, which tool calls
+were attempted (and which were denied), and which operator key signed
+each event. The Git commit shows the result; the agentwitness bundle
+shows the path.
+
 ## Status
 
 **v0.1.0, alpha.** First functional release: record via Claude Code
@@ -164,6 +172,24 @@ The signing key never leaves the OS keychain except as a working copy
 in the recorder process. To rotate keys, run `agentwitness uninstall
 --purge-keys` and then `agentwitness install` again. Old bundles still
 verify against the old public key recorded in their manifest.
+
+## Verifying bundles in CI
+
+To require that agent-assisted PRs carry a verifiable bundle, drop the
+[GitHub Action example](./examples/github-actions/verify-pr.yml) into
+`.github/workflows/agentwitness-verify.yml`. It runs `agentwitness
+verify` on any pull request that adds or changes files under
+`.agentwitness/`. Local workflow:
+
+```bash
+agentwitness export -o .agentwitness/pr-bundle
+git add .agentwitness/pr-bundle
+git commit -m "Attach agentwitness bundle"
+git push
+```
+
+The CI check then runs on push. PRs without `.agentwitness/` changes
+skip the workflow entirely.
 
 ## Uninstall
 
