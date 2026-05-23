@@ -1,0 +1,46 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "agentwitness"
+version = "0.0.1"
+description = "Verifiable evidence for AI-assisted engineering"
+readme = "README.md"
+requires-python = ">=3.9"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [
+    { name = "Nick Williamson", email = "nick@nickw.info" },
+]
+keywords = [
+    "ai",
+    "agents",
+    "provenance",
+    "attestation",
+    "audit",
+    "evidence",
+    "claude-code",
+]
+classifiers = [
+    "Development Status :: 1 - Planning",
+    "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Security",
+    "Topic :: Security :: Cryptography",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: System :: Logging",
+]
+
+[project.urls]
+Homepage = "https://agentwitness.dev"
+Repository = "https://github.com/ConceptPending/agentwitness"
+Issues = "https://github.com/ConceptPending/agentwitness/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/agentwitness"]
