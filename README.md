@@ -31,27 +31,25 @@ agentwitness verify: OK  (./evidence)
 
 ## Status
 
-**v0.1, pre-release.** First useful end-to-end path is in: record via
-Claude Code hooks, export a bundle, verify it. POSIX only (Linux and
-macOS); Windows support pending a cross-platform writer lock. API may
-shift before v0.2.
-
-The repo is currently private. The PyPI package name is reserved but
-the published artefact is a stub — install from source until v0.1.0
-ships there.
+**v0.1.0, alpha.** First functional release: record via Claude Code
+hooks, export a bundle, verify it. POSIX only (Linux and macOS);
+Windows support pending a cross-platform writer lock. API may shift
+before v0.2 — see the [changelog](./CHANGELOG.md) for the v0.1 feature
+set and known limitations.
 
 ## Quickstart
 
 ```bash
-# Install from source while the repo is private
-pipx install git+ssh://git@github.com/ConceptPending/agentwitness.git
+# Install with pipx (recommended) or pip
+pipx install agentwitness
 
 # One-time setup: generates an Ed25519 keypair in your OS keychain,
 # writes a default manifest, and adds hook entries to ~/.claude/settings.json
 # A .bak of any existing settings.json is written first.
 agentwitness install
 
-# Use Claude Code normally. Every PreToolUse / PostToolUse / SessionStart
+# Use Claude Code normally. Each PreToolUse, PostToolUse,
+# PostToolUseFailure, UserPromptSubmit, SessionStart, and SessionEnd
 # fires a hook that records a signed event into <state>/sessions/.
 
 # See what was recorded
@@ -67,6 +65,26 @@ agentwitness verify ./evidence
 # Uninstall (conservative — keeps keychain and recorded sessions)
 agentwitness uninstall
 ```
+
+Any Python 3.10, 3.11, or 3.12 works. The install is idempotent: running
+it twice reuses the existing key and refreshes the hook entries without
+duplicating them.
+
+## Upgrade and recovery
+
+Upgrade in place:
+
+```bash
+pipx upgrade agentwitness    # or: pip install -U agentwitness
+agentwitness install         # re-runs idempotently; refreshes hook entries
+```
+
+If `agentwitness install` aborts partway through, the operation is safe
+to retry. The `.bak` of any pre-existing `~/.claude/settings.json` is
+written before any modification, the keychain entry may already have
+been created (and will be reused on the next run), and re-running
+`install` is the supported recovery path. If you want a clean reset,
+run `agentwitness uninstall --purge-keys --purge-state` first.
 
 ## What this proves — and what it doesn't
 
