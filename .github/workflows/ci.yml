@@ -40,5 +40,9 @@ jobs:
       - name: Type check
         run: mypy src/agentwitness
 
+      # Coverage gate. v0 baseline is 85% branch coverage; ratchet up as
+      # code stabilises. The target is 90% on the security-critical
+      # modules (canonical, chain, signing, manifest, paths) which are
+      # already at or near 100%; the lower modules pull the average down.
       - name: Test
-        run: pytest --cov=agentwitness --cov-report=term-missing
+        run: pytest --cov=agentwitness --cov-branch --cov-report=term-missing --cov-fail-under=85
