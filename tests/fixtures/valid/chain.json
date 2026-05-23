@@ -1,0 +1,17 @@
+{
+  "sessions": [
+    {
+      "first_event_id": "94f6baed73ce2dbf66d961a87407239034627b6532ff333b5289872ea8022ab4",
+      "first_ts": "2026-05-23T14:00:00.000Z",
+      "head_event_id": "7d0ba3a1bfbe85fb08be773cbbedc90d44482c4ca76fb0a99174f9ff8d436f0b",
+      "head_seq": 2,
+      "last_ts": "2026-05-23T14:00:02.000Z",
+      "manifest_ids": [
+        "899d119751c7c932b7f91bf84918ed90dc59611649356a2f6e774b2ee3e11ef5"
+      ],
+      "session_agentwitness_id": "sess_av0123456789abcdefghijk"
+    }
+  ],
+  "sig": "YQap84QYgxxxhQzkK+36l6E3wos3AtQeHi8BXK14vnzvstU2Z9I4siA8ifR15QZajPD8alBEAZIxLg/zuCt7Cw==",
+  "v": "agentwitness/0.1"
+}
