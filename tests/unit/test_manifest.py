@@ -260,3 +260,62 @@ def test_event_with_disallowed_resource_denied_even_if_tool_allowed() -> None:
     )
     event = _tool_event(manifest=m, tool="Edit", path="src/secrets/key")
     assert evaluate_event_scope(event, m) is False
+
+
+# ---- Default builder ----
+
+
+def test_build_default_manifest_self_verifies() -> None:
+    from agentwitness.keys import key_id_from_verify_key
+    from agentwitness.manifest import build_default_manifest
+
+    sk = nacl.signing.SigningKey.generate()
+    kid = key_id_from_verify_key(sk.verify_key)
+    m = build_default_manifest(
+        signing_key=sk,
+        key_id=kid,
+        issued_at="2026-05-23T00:00:00.000Z",
+        expires_at="2027-05-23T00:00:00.000Z",
+    )
+    verify_manifest_id(m)
+    verify_manifest_signature(m)
+
+
+def test_build_default_manifest_allows_anything_in_allow_everything_mode() -> None:
+    from agentwitness.keys import key_id_from_verify_key
+    from agentwitness.manifest import build_default_manifest
+
+    sk = nacl.signing.SigningKey.generate()
+    kid = key_id_from_verify_key(sk.verify_key)
+    m = build_default_manifest(
+        signing_key=sk,
+        key_id=kid,
+        issued_at="2026-05-23T00:00:00.000Z",
+        expires_at="2027-05-23T00:00:00.000Z",
+        allow_everything=True,
+    )
+    for tool, path in [
+        ("Edit", "src/app.ts"),
+        ("Read", "anywhere/at/all.txt"),
+        ("Bash:pytest", "tests/test_x.py"),
+        ("WebFetch", "/etc/hostname"),
+    ]:
+        event = _tool_event(manifest=m, tool=tool, path=path)
+        assert evaluate_event_scope(event, m) is True, (tool, path)
+
+
+def test_build_default_manifest_denies_everything_when_not_permissive() -> None:
+    from agentwitness.keys import key_id_from_verify_key
+    from agentwitness.manifest import build_default_manifest
+
+    sk = nacl.signing.SigningKey.generate()
+    kid = key_id_from_verify_key(sk.verify_key)
+    m = build_default_manifest(
+        signing_key=sk,
+        key_id=kid,
+        issued_at="2026-05-23T00:00:00.000Z",
+        expires_at="2027-05-23T00:00:00.000Z",
+        allow_everything=False,
+    )
+    event = _tool_event(manifest=m, tool="Edit", path="src/app.ts")
+    assert evaluate_event_scope(event, m) is False
