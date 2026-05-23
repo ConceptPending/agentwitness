@@ -1,0 +1,32 @@
+{
+  "expires_at": "2026-05-23T22:00:00.000Z",
+  "id": "899d119751c7c932b7f91bf84918ed90dc59611649356a2f6e774b2ee3e11ef5",
+  "issued_at": "2026-05-23T14:00:00.000Z",
+  "issuer": "5876ae0e136cb79740f05a4732f5a924f0a87d80c1553d26b8dbfdfa5158eac2",
+  "principals": [
+    {
+      "key_id": "5876ae0e136cb79740f05a4732f5a924f0a87d80c1553d26b8dbfdfa5158eac2",
+      "label": "nick-laptop",
+      "public_key": "wXZQCpFADvm2wibjRt46sJ0N6v58EgGHG46Nv8v5Exs=",
+      "scopes": [
+        {
+          "allow_delegates": [],
+          "allow_paths": [
+            "src/**"
+          ],
+          "allow_tools": [
+            "Edit"
+          ],
+          "deny_paths": [],
+          "deny_tools": []
+        }
+      ]
+    }
+  ],
+  "project": {
+    "name": "agentwitness",
+    "root_hash": null
+  },
+  "sig": "Gwy937VF+39SWZpx8ktfv2Kw+fp7AhRBN+SVYjH5LDp/CFIeEIaov4UOaQncWzdkqcCHk/SNQ9ft7fErOOWSAQ==",
+  "v": "agentwitness/0.1"
+}
