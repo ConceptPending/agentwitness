@@ -124,6 +124,63 @@ def test_events_appended_to_jsonl(tmp_path: Path) -> None:
     assert json.loads(lines[1])["id"] == b["id"]
 
 
+def test_record_writes_event_and_signature_atomically(tmp_path: Path) -> None:
+    """record() writes both events.jsonl and signatures.jsonl in the same lock window."""
+    session = Session.open_or_create(tmp_path / "s", session_id="sess_test")
+
+    def fake_signer(event_id: str, signing_input: bytes) -> dict[str, Any]:
+        return {
+            "event_id": event_id,
+            "key_id": "k" * 64,
+            "alg": "ed25519",
+            "sig": "AAAA",
+            "input_bytes": len(signing_input),  # extra field for the test only
+        }
+
+    event, sig = session.record(_minimal_body(), signer=fake_signer)
+    assert sig["event_id"] == event["id"]
+    assert sig["input_bytes"] > 0
+
+    sig_lines = session.signatures_path.read_text().strip().splitlines()
+    event_lines = session.events_path.read_text().strip().splitlines()
+    assert len(sig_lines) == 1
+    assert len(event_lines) == 1
+    parsed_sig = json.loads(sig_lines[0])
+    assert parsed_sig["event_id"] == event["id"]
+
+
+def test_record_failures_in_signer_do_not_corrupt_log(tmp_path: Path) -> None:
+    """If the signer raises, no event or signature line is written."""
+    session = Session.open_or_create(tmp_path / "s", session_id="sess_test")
+
+    def bad_signer(event_id: str, signing_input: bytes) -> dict[str, Any]:
+        raise RuntimeError("signer exploded")
+
+    with pytest.raises(RuntimeError):
+        session.record(_minimal_body(), signer=bad_signer)
+
+    assert not session.events_path.exists() or session.events_path.read_text() == ""
+    assert not session.signatures_path.exists() or session.signatures_path.read_text() == ""
+
+
+def test_record_then_append_unsigned_breaks_signature_invariant(tmp_path: Path) -> None:
+    """Documents the known limitation: mixing record() and append() in one session
+    produces a signature count != event count. This is by design — append() is for
+    unsigned contexts, record() is for signed contexts; do not mix in one session."""
+    session = Session.open_or_create(tmp_path / "s", session_id="sess_test")
+
+    def signer(event_id: str, signing_input: bytes) -> dict[str, Any]:
+        return {"event_id": event_id, "key_id": "k" * 64, "alg": "ed25519", "sig": "AA"}
+
+    session.record(_minimal_body(), signer=signer)
+    session.append(_minimal_body(kind="user.prompt"))  # unsigned — by design
+
+    events = session.events_path.read_text().strip().splitlines()
+    sigs = session.signatures_path.read_text().strip().splitlines()
+    assert len(events) == 2
+    assert len(sigs) == 1  # the count mismatch the verifier would catch
+
+
 def test_concurrent_write_rejected(tmp_path: Path) -> None:
     """Two processes can't both hold the writer lock at once."""
     import fcntl
