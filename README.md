@@ -29,6 +29,25 @@ agentwitness verify: OK  (./evidence)
   sessions seen:     1
 ```
 
+## Why
+
+When an AI agent writes code in your repository, three questions follow:
+what did it touch, on whose authority, and can anyone else verify it?
+Today the answers are a Git diff and the human's word. agentwitness
+produces signed, offline-verifiable evidence of which actions the agent
+took, when, and under what scope.
+
+You might want it if:
+
+- You're a contractor whose agent edits a customer's codebase and the
+  customer wants to know what it touched.
+- You're answering a security questionnaire about how AI assists your
+  development.
+- Something broke in production after an agent-assisted change and you
+  need to replay what happened.
+- You want PRs from agent-assisted work to ship with independently
+  verifiable evidence of what the agent did.
+
 ## Status
 
 **v0.1.0, alpha.** First functional release: record via Claude Code
