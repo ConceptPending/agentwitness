@@ -326,12 +326,12 @@ def _blame_matches(query: str, resource_path: str) -> bool:
 
     Three cases match:
 
-    - Exact equality: ``blame /Users/nick/lorem.md`` matches the same string.
-    - Trailing path segment: ``blame lorem.md`` matches
-      ``/Users/nick/lorem.md`` and ``src/lorem.md`` (anything ending with
-      ``/lorem.md``), but does NOT match ``/Users/nick/other-lorem.md``.
+    - Exact equality: ``blame /path/to/file.md`` matches the same string.
+    - Trailing path segment: ``blame file.md`` matches
+      ``/path/to/file.md`` and ``src/file.md`` (anything ending with
+      ``/file.md``), but does NOT match ``/path/to/other-file.md``.
     - Same trailing tail with multiple segments: ``blame src/auth.ts``
-      matches ``/Users/nick/proj/src/auth.ts``.
+      matches ``/repo/src/auth.ts``.
 
     An absolute query (``/foo``) requires exact equality — the user was
     specific, take them at their word.
@@ -352,9 +352,9 @@ def blame_cmd(file_path: str) -> None:
 
     Matching is forgiving by default:
 
-    - ``blame lorem.md`` matches ``/Users/nick/lorem.md`` or
-      ``src/lorem.md`` (any path ending with ``/lorem.md``).
-    - ``blame src/auth.ts`` matches ``/Users/nick/proj/src/auth.ts``.
+    - ``blame file.md`` matches ``/path/to/file.md`` or
+      ``src/file.md`` (any path ending with ``/file.md``).
+    - ``blame src/auth.ts`` matches ``/repo/src/auth.ts``.
     - ``blame /absolute/path`` requires an exact match.
     """
     sessions = _list_session_dirs()
