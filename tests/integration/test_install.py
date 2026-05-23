@@ -144,6 +144,61 @@ def test_is_agentwitness_entry_does_not_match_unrelated_tool() -> None:
     assert not _is_agentwitness_entry(entry)
 
 
+# ---- Command resolution ----
+
+
+def test_agentwitness_command_prefers_argv0(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """When invoked as ``agentwitness install``, sys.argv[0] is the script we want to use."""
+    from agentwitness.install import agentwitness_command
+
+    fake_script = tmp_path / "agentwitness"
+    fake_script.write_text("#!/bin/sh\necho fake\n")
+    fake_script.chmod(0o755)
+    monkeypatch.setattr("sys.argv", [str(fake_script), "install"])
+    cmd = agentwitness_command()
+    assert cmd == f"{fake_script.resolve()} hook"
+
+
+def test_agentwitness_command_falls_back_to_interpreter_bin_dir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """When argv[0] isn't the script (e.g. import-based use), look next to python."""
+    from agentwitness.install import agentwitness_command
+
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    (fake_bin / "python3").write_text("#!/bin/sh\n")
+    (fake_bin / "python3").chmod(0o755)
+    (fake_bin / "agentwitness").write_text("#!/bin/sh\n")
+    (fake_bin / "agentwitness").chmod(0o755)
+
+    monkeypatch.setattr("sys.argv", ["something-else", "install"])
+    monkeypatch.setattr("sys.executable", str(fake_bin / "python3"))
+    monkeypatch.setenv("PATH", str(tmp_path / "nowhere"))
+    cmd = agentwitness_command()
+    assert cmd == f"{fake_bin / 'agentwitness'} hook"
+
+
+def test_agentwitness_command_falls_back_to_module_invocation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """No script anywhere: invoke the CLI as a Python module."""
+    from agentwitness.install import agentwitness_command
+
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    fake_python = fake_bin / "python3"
+    fake_python.write_text("#!/bin/sh\n")
+    fake_python.chmod(0o755)
+    monkeypatch.setattr("sys.argv", ["something-else", "install"])
+    monkeypatch.setattr("sys.executable", str(fake_python))
+    monkeypatch.setenv("PATH", str(tmp_path / "nowhere"))
+    cmd = agentwitness_command()
+    assert cmd == f"{fake_python} -m agentwitness.cli hook"
+
+
 # ---- Install ----
 
 

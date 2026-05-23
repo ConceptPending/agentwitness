@@ -92,14 +92,33 @@ def claude_settings_path() -> Path:
 def agentwitness_command() -> str:
     """Return the absolute command string used in hook entries.
 
-    Prefers an ``agentwitness`` binary on PATH (from pipx, pip --user, or
-    a virtualenv). Falls back to invoking the CLI via the current
-    Python interpreter as a module, which is robust at the cost of being
-    less readable in the settings file.
+    Resolution order, from cleanest to most robust:
+
+    1. ``sys.argv[0]`` if it looks like an ``agentwitness`` script. When
+       the user runs ``agentwitness install``, ``sys.argv[0]`` is the
+       script they invoked, so by definition that path works.
+    2. The interpreter's bin directory. Catches pyenv and virtualenv
+       installs where the script lives next to ``python`` but PATH
+       doesn't include that bin directory.
+    3. ``shutil.which("agentwitness")``. Catches pipx and pip-user
+       installs where the script is on PATH.
+    4. ``{sys.executable} -m agentwitness.cli hook``. Always works.
+       Used as a last resort because it hard-codes a Python path that
+       can move (venv recreation, Python version change).
     """
+    argv0 = Path(sys.argv[0]) if sys.argv and sys.argv[0] else None
+    if argv0 is not None and argv0.name.startswith("agentwitness") and argv0.is_file():
+        return f"{argv0.resolve()} hook"
+
+    bin_dir = Path(sys.executable).resolve().parent
+    candidate = bin_dir / "agentwitness"
+    if candidate.is_file() and os.access(candidate, os.X_OK):
+        return f"{candidate} hook"
+
     path = shutil.which("agentwitness")
     if path:
         return f"{path} hook"
+
     return f"{sys.executable} -m agentwitness.cli hook"
 
 
