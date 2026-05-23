@@ -1,15 +1,7 @@
-"""End-to-end integration: recorder produces bundles the verifier accepts.
-
-This is the closure test for Phase 5 commit 5. A separate (later) commit
-will extract the bundle-assembly helper into a proper module; for now it
-lives inline in this test.
-"""
+"""End-to-end integration: recorder produces bundles the verifier accepts."""
 
 from __future__ import annotations
 
-import base64
-import json
-import shutil
 from pathlib import Path
 from typing import Any
 
@@ -18,10 +10,10 @@ import pytest
 
 from agentwitness import keychain, verify
 from agentwitness.errors import KeyResolutionError
+from agentwitness.export import build_bundle
 from agentwitness.keys import key_id_from_verify_key
 from agentwitness.manifest import build_default_manifest
 from agentwitness.recorder import Recorder
-from agentwitness.signing import sign_chain
 from agentwitness.state import ENV_OVERRIDE
 from agentwitness.writer import Session
 
@@ -72,46 +64,6 @@ def _make_event_body(
             else []
         )
     return body
-
-
-def _assemble_bundle(
-    *,
-    session: Session,
-    manifest: dict[str, Any],
-    signing_key: nacl.signing.SigningKey,
-    out_dir: Path,
-) -> Path:
-    """Build a verifiable bundle from a session's outputs.
-
-    The export-proper logic lands in a later commit. This helper exists so
-    the recorder's outputs can be verified end-to-end *now*.
-    """
-    out_dir.mkdir(parents=True, exist_ok=True)
-    shutil.copy(session.events_path, out_dir / "events.jsonl")
-    shutil.copy(session.signatures_path, out_dir / "signatures.jsonl")
-    (out_dir / "manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
-
-    events = [
-        json.loads(line) for line in (out_dir / "events.jsonl").read_text().splitlines() if line
-    ]
-    chain: dict[str, Any] = {
-        "v": "agentwitness/0.1",
-        "sessions": [
-            {
-                "session_agentwitness_id": events[0]["session"]["agentwitness_id"],
-                "first_event_id": events[0]["id"],
-                "head_event_id": events[-1]["id"],
-                "head_seq": events[-1]["seq"],
-                "first_ts": events[0]["ts"],
-                "last_ts": events[-1]["ts"],
-                "manifest_ids": [manifest["id"]],
-            }
-        ],
-    }
-    chain_sig = sign_chain(chain, signing_key)
-    chain["sig"] = base64.b64encode(chain_sig).decode()
-    (out_dir / "chain.json").write_text(json.dumps(chain, indent=2, sort_keys=True) + "\n")
-    return out_dir
 
 
 def test_bootstrap_then_record_then_verify(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -169,7 +121,7 @@ def test_bootstrap_then_record_then_verify(tmp_path: Path, monkeypatch: pytest.M
     )
 
     # Assemble a bundle and verify it.
-    bundle_path = _assemble_bundle(
+    bundle_path = build_bundle(
         session=recorder.session,
         manifest=manifest,
         signing_key=signing_key,
