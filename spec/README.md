@@ -20,7 +20,7 @@ Spec changes follow:
 
 | Version | Status | Editor |
 |---|---|---|
-| [v0.1](./v0.1.md) | Draft (internal review only) | Nick Williamson |
+| [v0.1](./v0.1.md) | Draft, open for review | Nick Williamson |
 
 ## License
 
