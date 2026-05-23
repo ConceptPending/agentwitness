@@ -321,34 +321,66 @@ def summary_cmd(label: str) -> None:
         click.echo(f"  {path.name}  {len(events):>4} events  {first} → {last}  ({platform})")
 
 
+def _blame_matches(query: str, resource_path: str) -> bool:
+    """True when ``query`` should be considered a match for ``resource_path``.
+
+    Three cases match:
+
+    - Exact equality: ``blame /Users/nick/lorem.md`` matches the same string.
+    - Trailing path segment: ``blame lorem.md`` matches
+      ``/Users/nick/lorem.md`` and ``src/lorem.md`` (anything ending with
+      ``/lorem.md``), but does NOT match ``/Users/nick/other-lorem.md``.
+    - Same trailing tail with multiple segments: ``blame src/auth.ts``
+      matches ``/Users/nick/proj/src/auth.ts``.
+
+    An absolute query (``/foo``) requires exact equality — the user was
+    specific, take them at their word.
+    """
+    if not resource_path:
+        return False
+    if query == resource_path:
+        return True
+    if not query.startswith("/") and resource_path.endswith("/" + query):
+        return True
+    return False
+
+
 @cli.command("blame")
 @click.argument("file_path", type=str)
 def blame_cmd(file_path: str) -> None:
     """Show recorded events that touched FILE_PATH.
 
-    Match is exact-string against the ``path`` field of each event's
-    resources. In v0.1 the recorder writes file paths verbatim from the
-    agent's tool input; glob support is post-v0.
+    Matching is forgiving by default:
+
+    - ``blame lorem.md`` matches ``/Users/nick/lorem.md`` or
+      ``src/lorem.md`` (any path ending with ``/lorem.md``).
+    - ``blame src/auth.ts`` matches ``/Users/nick/proj/src/auth.ts``.
+    - ``blame /absolute/path`` requires an exact match.
     """
     sessions = _list_session_dirs()
     if not sessions:
         click.echo(f"No events recorded yet (looked for {file_path}).")
         return
 
-    matches: list[tuple[str, str, str, str, str]] = []  # (ts, kind, tool, session, status)
+    matches: list[tuple[str, str, str, str, str, str]] = []
+    # (ts, kind, tool, session, status, matched_path)
     for sess_path in sessions:
         for event in _read_session_events(sess_path):
             resources = event.get("resources") or []
-            if any(r.get("path") == file_path for r in resources):
-                matches.append(
-                    (
-                        event.get("ts", ""),
-                        event.get("kind", "?"),
-                        event.get("tool", "?"),
-                        sess_path.name,
-                        event.get("outcome", {}).get("status", "?"),
+            for resource in resources:
+                resource_path = resource.get("path", "")
+                if _blame_matches(file_path, resource_path):
+                    matches.append(
+                        (
+                            event.get("ts", ""),
+                            event.get("kind", "?"),
+                            event.get("tool", "?"),
+                            sess_path.name,
+                            event.get("outcome", {}).get("status", "?"),
+                            resource_path,
+                        )
                     )
-                )
+                    break  # one match per event is enough
 
     if not matches:
         click.echo(f"No recorded events touched {file_path}.")
@@ -356,8 +388,8 @@ def blame_cmd(file_path: str) -> None:
 
     matches.sort(key=lambda row: row[0])
     click.echo(f"events touching {file_path}:")
-    for ts, kind, tool, sess, status in matches:
-        click.echo(f"  {_format_ts(ts)}  {kind:<16} {tool:<14} {sess[:20]}  ({status})")
+    for ts, kind, tool, sess, status, path in matches:
+        click.echo(f"  {_format_ts(ts)}  {kind:<16} {tool:<14} {sess[:20]}  ({status})  {path}")
 
 
 def main() -> None:
