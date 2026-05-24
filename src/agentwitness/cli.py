@@ -90,23 +90,25 @@ def hook_cmd() -> None:
     help="Keychain label to store the signing key under.",
 )
 @click.option(
-    "--strict/--allow-everything",
+    "--deny-all/--allow-all",
+    "deny_all",
     default=False,
     show_default=True,
     help=(
-        "Manifest scope: --strict starts with no permissions (every action denied);"
-        " --allow-everything (the default) creates a permissive scope so the recorder"
-        " logs everything without blocking."
+        "Default scope for the manifest. --allow-all (the default) creates a"
+        " permissive scope so the recorder logs every action without blocking."
+        " --deny-all creates a scope that denies everything by default — useful"
+        " for strict pilots or test runs."
     ),
 )
-def install_cmd(label: str, strict: bool) -> None:
+def install_cmd(label: str, deny_all: bool) -> None:
     """Non-interactive install. Idempotent.
 
     Generates an Ed25519 keypair (or reuses the existing one), stores the
     seed in the OS keychain, writes the user-level manifest, and patches
     ``~/.claude/settings.json`` to invoke ``agentwitness hook``.
     """
-    result = install_impl(label=label, allow_everything=not strict)
+    result = install_impl(label=label, allow_everything=not deny_all)
     if result.key_existed:
         click.echo(f"Using existing key in keychain (label: {label})")
     else:
