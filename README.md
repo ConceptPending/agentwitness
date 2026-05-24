@@ -4,6 +4,10 @@ Record what your coding agent did, under whose authority, with what scope,
 and produce signed evidence anyone can verify offline. Useful for PR review,
 incident response, security questionnaires, and AI governance audits.
 
+In v0.1 the recorder captures file operations (Edit, Write, Read) with full
+path detail. Bash and web tools (WebFetch, WebSearch) are recorded by name
+only; richer command-level capture lands in v0.2.
+
 ```
 $ agentwitness summary
 manifest: 7c6adca6eae24556f8215314cdb74094aa31fe3c747a508d3ef16fe60205a608
@@ -63,6 +67,11 @@ hooks, export a bundle, verify it. POSIX only (Linux and macOS);
 Windows support pending a cross-platform writer lock. API may shift
 before v0.2 — see the [changelog](./CHANGELOG.md) for the v0.1 feature
 set and known limitations.
+
+No external adopters yet. If you're trying it on real work — especially
+contractor-customer workflows, AI-governance evidence, or multi-tenant
+identity scenarios — open an issue or email <nick@nickw.info>.
+Design-partner feedback shapes v0.2.
 
 ## Quickstart
 
@@ -227,8 +236,8 @@ Deferred to post-v0.1:
 - Windows-compatible writer lock
 - Multi-machine session merging
 - Tarball bundle packaging
-- Hosted dashboard / Cowork plugin (the Python API at
-  `Recorder.bootstrap` is the integration surface)
+- Other agent runtimes (the `Recorder.bootstrap` Python API is the
+  integration surface; v0.1 only wires Claude Code via hooks)
 
 See the open questions in [`spec/v0.1.md` §14](./spec/v0.1.md#14-open-questions).
 

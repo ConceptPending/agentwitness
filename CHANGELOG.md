@@ -33,8 +33,8 @@ First functional release.
   default (keeps keychain and recorded sessions). `--purge-keys`,
   `--purge-state`, `--purge-all`, and `--restore-from-backup` flags
   for deeper cleanup.
-- `agentwitness.Recorder` library API for GUI / Cowork plugins that
-  want to record without the CLI.
+- `agentwitness.Recorder` library API for other agent runtimes that
+  want to record without going through the CLI.
 - Spec v0.1 (`spec/v0.1.md`, CC-BY-4.0) defining the canonical
   serialisation (RFC 8785 JCS), event format, hash chain, signing
   envelope, manifest, and evidence bundle layout. Reserves an
